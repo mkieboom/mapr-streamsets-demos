@@ -1,0 +1,44 @@
+Amsterdam Parking Data
+
+# Install mapr-kafka
+yum install -y mapr-kafka
+/opt/mapr/server/configure.sh -R
+
+
+# Create a volume for the parking json data
+maprcli volume create -name parkingdata -path /parkingdata
+chmod 777 /mapr/demo.mapr.com/parkingdata/
+
+maprcli volume create -name parkingdata_json -path /parkingdata/parkingdata_json
+chmod 777 /mapr/demo.mapr.com/parkingdata/parkingdata_json
+
+# Create a MapR Stream
+rm -rf /mapr/demo.mapr.com/parkingdata/parkingdata_stream
+maprcli stream create -path /parkingdata/parkingdata_stream -produceperm p -consumeperm p -topicperm p
+maprcli stream topic create -path /parkingdata/parkingdata_stream -topic parkingdata
+
+# Create MapR-DB table
+rm -rf /mapr/demo.mapr.com/parkingdata/parkingdata_db
+maprcli table create -path /parkingdata/parkingdata_db -tabletype json
+maprcli table cf edit -path /parkingdata/parkingdata_db -cfname default -readperm p -writeperm p -traverseperm  p
+
+# Create a MapR CDC Stream for the MapR-DB <optional>
+maprcli stream create -path /parkingdata/parkingdata_db_cdc -ischangelog true  -produceperm p -consumeperm p -topicperm p
+maprcli table changelog add -path /parkingdata/parkingdata_db -changelog /parkingdata/parkingdata_db_cdc:parkingdata_cdc
+
+# Create a MapR Stream for the StreamSets Pipeline errors
+rm -rf /mapr/demo.mapr.com/parkingdata/streamsets_stream
+maprcli stream create -path /parkingdata/streamsets_stream -produceperm p -consumeperm p -topicperm p
+maprcli stream topic create -path /parkingdata/streamsets_stream -topic errors
+
+
+# Launch a stream listener on the Parkingdata topic
+/opt/mapr/kafka/kafka-*/bin/kafka-console-consumer.sh --new-consumer --bootstrap-server this.will.be.ignored:9092 --topic /parkingdata_stream:parkingdata
+
+# Launch a CDC stream listener
+/opt/mapr/kafka/kafka-*/bin/kafka-console-consumer.sh --new-consumer --bootstrap-server this.will.be.ignored:9092 --topic /parkingdata_db_cdc:parkingdatacdc
+
+# Cleanup
+rm -rf /mapr/demo.mapr.com/parkingdata/parkingdatadb
+rm -rf /mapr/demo.mapr.com/parkingdata/parkingdatastream
+rm -rf /mapr/demo.mapr.com/parkingdata/parkingdatadbcdc
